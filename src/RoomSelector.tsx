@@ -1,51 +1,74 @@
-import { Schema } from "../amplify/data/resource"
-import { defaultRoom } from "./utils";
-import { useEffect, useState } from "react";
+import { Schema } from "../amplify/data/resource"; // Import the schema definition
+import { defaultRoom } from "./utils"; // Import the default room object
+import { useEffect, useState } from "react"; // Import React hooks
+import { generateClient } from "aws-amplify/data"; // Import the client generation utility
 
-import { generateClient } from "aws-amplify/data";
-
+// Initialize the Amplify client with the schema type
 const client = generateClient<Schema>();
 
 export function RoomSelector({
-  currentRoomId,
-  onRoomChange
+  currentRoomId, // ID of the currently selected room
+  onRoomChange, // Callback to handle room changes
 }: {
-  currentRoomId: string,
-  onRoomChange: (roomId: string) => void
+  currentRoomId: string; // Current room ID must be a string
+  onRoomChange: (roomId: string) => void; // Function to handle room ID changes
 }) {
+  // State to store the list of rooms, initialized with a default room
+  const [rooms, setRooms] = useState<Schema["Room"]["type"][]>([defaultRoom]);
 
-  const [rooms, setRooms] = useState<Schema["Room"]["type"][]>([defaultRoom])
-  
   useEffect(() => {
-    // Add observeQuery code here
-    // set up a live feed inside the useEffect
+    // Set up a live feed to observe room changes
     const sub = client.models.Room.observeQuery().subscribe({
       next: (data) => {
-        setRooms([defaultRoom, ...data.items])
-      }
-    })
-    return () => sub.unsubscribe()
-  }, [])
+        // Update the room list with the default room and new data
+        setRooms([defaultRoom, ...data.items]);
+      },
+    });
 
-  return <>
-    <select
-      onChange={e => onRoomChange(e.target.value)}
-      value={currentRoomId}>
-      {rooms.map(room => <option value={room.id} key={room.id}>{room.topic}</option>)}
-    </select>
-    <button onClick={async () => {
-      
-      const newRoomName = window.prompt("Room name")
-      if (!newRoomName) {
-        return
-      }
-      const { data: room } = await client.models.Room.create({
-        topic: newRoomName
-      })
-      
-      if (room !== null) {
-        onRoomChange(room.id)
-      }
-    }}>[+ add]</button>
-  </>
+    // Cleanup the subscription when the component unmounts
+    return () => sub.unsubscribe();
+  }, []); // Empty dependency array ensures this runs only once after mounting
+
+  return (
+    <>
+      {/* Accessible label for the room selector */}
+      <label htmlFor="room-selector">Select a room</label>
+
+      {/* Dropdown to select a room */}
+      <select
+        id="room-selector" // Associates with the label for accessibility
+        onChange={(e) => onRoomChange(e.target.value)} // Trigger onRoomChange when selection changes
+        value={currentRoomId} // Set the current value of the dropdown
+      >
+        {rooms.map((room) => (
+          <option value={room.id} key={room.id}>
+            {room.topic} {/* Display room topic */}
+          </option>
+        ))}
+      </select>
+
+      {/* Button to add a new room */}
+      <button
+        onClick={async () => {
+          // Prompt the user for a new room name
+          const newRoomName = window.prompt("Room name");
+          if (!newRoomName) {
+            return; // Exit if the user cancels the prompt
+          }
+
+          // Create a new room using the client
+          const room = await client.models.Room.create({
+            topic: newRoomName,
+          });
+
+          // Update the selected room if the creation was successful
+          if (room !== null && "id" in room) {
+            onRoomChange((room as { id: string }).id);
+          }
+        }}
+      >
+        [+ add] {/* Button text */}
+      </button>
+    </>
+  );
 }
